@@ -23,7 +23,10 @@ cloudinary.config(
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # Load Google credentials from environment variable (Render secret)
-google_credentials_json = os.environ['GOOGLE_CREDENTIALS']
+google_credentials_json = os.environ.get('GOOGLE_CREDENTIALS')
+if google_credentials_json is None:
+    raise ValueError("Environment variable 'GOOGLE_CREDENTIALS' is missing.")
+
 credentials_dict = json.loads(google_credentials_json)
 
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, SCOPES)
