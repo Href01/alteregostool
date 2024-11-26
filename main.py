@@ -8,6 +8,7 @@ import cloudinary
 import cloudinary.uploader
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json
 
 app = Flask(__name__)
 
@@ -20,11 +21,12 @@ cloudinary.config(
 
 # Set up gspread
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-SERVICE_ACCOUNT_FILE = 'data-process-automation-b9eb629d452c.json'  # Replace with your service account file
 
-credentials = ServiceAccountCredentials.from_json_keyfile_name(
-    SERVICE_ACCOUNT_FILE, SCOPES
-)
+# Load Google credentials from environment variable (Render secret)
+google_credentials_json = os.environ['GOOGLE_CREDENTIALS']
+credentials_dict = json.loads(google_credentials_json)
+
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, SCOPES)
 gc = gspread.authorize(credentials)
 
 # Access the Google Sheet
@@ -88,10 +90,10 @@ def update_sheet(data):
 def process_data():
     """Endpoint to trigger the data processing."""
     input_data = fetch_data()
-    output_data = []
+    output_data = []  # Initialize the output data list
 
     for row in input_data:
-        if len(row) < 2:
+        if len(row) < 2:  # Skip rows with insufficient data
             continue
         sku_code, image_link = row
         ean_code = generate_ean()
