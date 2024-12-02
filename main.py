@@ -47,6 +47,8 @@ session = requests.Session()
 retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
+BATCH_SIZE = 10  # Process 10 rows at a time
+
 def generate_ean():
     """Generates a valid EAN-13 code."""
     digits = [random.randint(0, 9) for _ in range(12)]
@@ -85,13 +87,11 @@ def process_image(image_url, sku_code):
         app.logger.error(f"Error processing image for SKU {sku_code}: {e}")
         return None
 
-def fetch_data():
-    """Fetches data from the input sheet."""
-    try:
-        return input_sheet.get_all_values()[1:]  # Skip the header row
-    except Exception as e:
-        app.logger.error(f"Error fetching data from the input sheet: {e}")
-        return []
+def fetch_data_in_batches():
+    """Fetches data from the input sheet in batches of 10 rows."""
+    all_data = input_sheet.get_all_values()[1:]  # Skip the header row
+    for i in range(0, len(all_data), BATCH_SIZE):
+        yield all_data[i:i + BATCH_SIZE]
 
 def update_sheet(data):
     """Updates the output sheet with data."""
@@ -104,27 +104,27 @@ def update_sheet(data):
 @app.route('/process-data', methods=['POST'])
 def process_data():
     """Endpoint to trigger the data processing."""
-    input_data = fetch_data()
-    if not input_data:
-        return jsonify({"status": "error", "message": "Failed to fetch data from the input sheet"}), 500
-
+    input_data_batches = fetch_data_in_batches()
     output_data = []  # Initialize the output data list
 
-    for row in input_data:
-        if len(row) < 2:  # Skip rows with insufficient data
-            continue
-        sku_code, image_link = row
-        ean_code = generate_ean()
-        new_image_link = process_image(image_link, sku_code)
-        if new_image_link:
-            output_data.append([sku_code, ean_code, new_image_link])
+    for batch in input_data_batches:
+        for row in batch:
+            if len(row) < 2:  # Skip rows with insufficient data
+                continue
+            sku_code, image_link = row
+            ean_code = generate_ean()
+            new_image_link = process_image(image_link, sku_code)
+            if new_image_link:
+                output_data.append([sku_code, ean_code, new_image_link])
+
+        app.logger.info(f"Processed a batch of {len(batch)} rows.")
 
     if output_data:
         update_sheet(output_data)
     else:
         return jsonify({"status": "error", "message": "No valid data to process"}), 500
 
-    return jsonify({"status": "success", "message": "Data processed successfully!"})
+    return jsonify({"status": "success", "message": f"Processed {len(output_data)} rows successfully!"})
 
 @app.route('/')
 def home():
